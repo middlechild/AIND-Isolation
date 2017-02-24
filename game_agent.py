@@ -7,11 +7,112 @@ You must test your agent's strength against a set of agents with known
 relative strength using tournament.py and include the results in your report.
 """
 import random
+import logging
+
+logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
 
 
 class Timeout(Exception):
     """Subclass base exception for code clarity."""
     pass
+
+
+def heuristic_one(game, player):
+    """The "heuristic_one" evaluation function outputs a score equal to
+    the difference in the number of moves available to the player and
+    two times the number of moves available to the opponent.
+
+    Parameters
+    ----------
+    game : `isolation.Board`
+        An instance of `isolation.Board` encoding the current state of the
+        game (e.g., player locations and blocked cells).
+
+    player : hashable
+        One of the objects registered by the game object as a valid player.
+        (i.e., `player` should be either game.__player_1__ or
+        game.__player_2__).
+
+    Returns
+    ----------
+    float
+        The heuristic value of the current game state
+    """
+
+    own_moves = len(game.get_legal_moves(player))
+    opp_moves = len(game.get_legal_moves(game.get_opponent(player)))
+    return float(own_moves - (2 * opp_moves))
+
+
+def heuristic_two(game, player):
+    """The "heuristic_two" evaluation function outputs a score equal to
+    the difference in the number of moves available to the player and
+    the weighted number of moves available to the opponent. In this heuristic,
+    the additional weight applied is greater at the beginning of the game and
+    diminishes as the game progresses.
+
+
+    Parameters
+    ----------
+    game : `isolation.Board`
+        An instance of `isolation.Board` encoding the current state of the
+        game (e.g., player locations and blocked cells).
+
+    player : hashable
+        One of the objects registered by the game object as a valid player.
+        (i.e., `player` should be either game.__player_1__ or
+        game.__player_2__).
+
+    Returns
+    ----------
+    float
+        The heuristic value of the current game state
+    """
+
+    own_moves = len(game.get_legal_moves(player))
+    opp_moves = len(game.get_legal_moves(game.get_opponent(player)))
+    max_blank_spaces = 46
+    blank_spaces = len(game.get_blank_spaces())
+
+    return float(own_moves - ((2 + (blank_spaces/max_blank_spaces)) * opp_moves))
+
+
+def heuristic_three(game, player):
+    """The "heuristic_three" evaluation function outputs a score equal to
+    the difference in the number of moves available to the two players in the
+    next two rounds, with weight added to the opponent's moves for more
+    aggressive game play. In this heuristic, the additional weight applied is
+    greater at the beginning of the game and diminishes as the game progresses.
+
+    Parameters
+    ----------
+    game : `isolation.Board`
+        An instance of `isolation.Board` encoding the current state of the
+        game (e.g., player locations and blocked cells).
+
+    player : hashable
+        One of the objects registered by the game object as a valid player.
+        (i.e., `player` should be either game.__player_1__ or
+        game.__player_2__).
+
+    Returns
+    ----------
+    float
+        The heuristic value of the current game state
+    """
+
+    own_moves = len(game.get_legal_moves(player))
+    opp_moves = len(game.get_legal_moves(game.get_opponent(player)))
+    max_blank_spaces = 46
+    blank_spaces = len(game.get_blank_spaces())
+
+    for move in game.get_legal_moves(player):
+        own_moves += len(game.__get_moves__(move))
+
+    for move in game.get_legal_moves(game.get_opponent(player)):
+        opp_moves += len(game.__get_moves__(move))
+
+    return float(own_moves - ((2 + (blank_spaces/max_blank_spaces)) * opp_moves))
 
 
 def custom_score(game, player):
@@ -37,7 +138,14 @@ def custom_score(game, player):
         The heuristic value of the current game state to the specified player.
     """
 
-    # TODO: finish this function!
+    if game.is_loser(player):
+        return float("-inf")
+
+    if game.is_winner(player):
+        return float("inf")
+
+    return heuristic_three(game, player)
+
     raise NotImplementedError
 
 
@@ -52,7 +160,7 @@ class CustomPlayer:
     search_depth : int (optional)
         A strictly positive integer (i.e., 1, 2, 3,...) for the number of
         layers in the game tree to explore for fixed-depth search. (i.e., a
-        depth of one (1) would only explore the immediate sucessors of the
+        depth of one (1) would only explore the immediate successors of the
         current state.)
 
     score_fn : callable (optional)
@@ -72,13 +180,14 @@ class CustomPlayer:
     """
 
     def __init__(self, search_depth=3, score_fn=custom_score,
-                 iterative=True, method='minimax', timeout=10.):
+                 iterative=True, method='minimax', timeout=15.):
         self.search_depth = search_depth
         self.iterative = iterative
         self.score = score_fn
         self.method = method
         self.time_left = None
         self.TIMER_THRESHOLD = timeout
+        self.count = 0
 
     def get_move(self, game, legal_moves, time_left):
         """Search for the best move from the available legal moves and return a
@@ -118,24 +227,54 @@ class CustomPlayer:
 
         self.time_left = time_left
 
-        # TODO: finish this function!
-
         # Perform any required initializations, including selecting an initial
         # move from the game board (i.e., an opening book), or returning
         # immediately if there are no legal moves
+
+        if not legal_moves:
+            return (-1, -1)
+
+        # Have something ready to be returned in case of timeout
+        current_score, current_move = float("-inf"), legal_moves[0]
+
+        # Just for clarity
+        argmax = max
 
         try:
             # The search method call (alpha beta or minimax) should happen in
             # here in order to avoid timeout. The try/except block will
             # automatically catch the exception raised by the search method
             # when the timer gets close to expiring
+
+            if self.method == 'minimax':
+                if self.iterative is True:
+                    self.search_depth = 1
+                    while current_score is not float("inf"):
+                        current_score, current_move = argmax(self.minimax(game, self.search_depth), (current_score, current_move))
+                        self.search_depth += 1
+                else:
+                    current_score, current_move = argmax(self.minimax(game, self.search_depth), (current_score, current_move))
+
+            elif self.method == 'alphabeta':
+                if self.iterative is True:
+                    self.search_depth = 1
+                    while current_score is not float("inf"):
+                        current_score, current_move = argmax(self.alphabeta(game, self.search_depth), (current_score, current_move))
+                        self.search_depth += 1
+                else:
+                    current_score, current_move = argmax(self.alphabeta(game, self.search_depth), (current_score, current_move))
+
             pass
 
         except Timeout:
-            # Handle any actions required at timeout, if necessary
+            # Handle any actions required at timeout
+            # logging.warning('TIMEOUT - Result Returned: %s', current_move)
+            return current_move
             pass
 
         # Return the best move from the last completed search iteration
+        return current_move
+
         raise NotImplementedError
 
     def minimax(self, game, depth, maximizing_player=True):
@@ -169,10 +308,33 @@ class CustomPlayer:
                 to pass the project unit tests; you cannot call any other
                 evaluation function directly.
         """
-        if self.time_left() < self.TIMER_THRESHOLD:
-            raise Timeout()
 
-        # TODO: finish this function!
+        best_move = (-1, -1)
+
+        if depth == 0:
+            return self.score(game, self), best_move
+
+        if maximizing_player is True:
+            # Checking for time left here allow us to do it more often and avoid timeout issues
+            if self.time_left() < self.TIMER_THRESHOLD:
+                raise Timeout()
+
+            best_value = float("-inf")
+            for move in game.get_legal_moves():
+                value, _ = self.minimax(game.forecast_move(move), depth-1, False)
+                best_value, best_move = max((best_value, best_move), (value, move))
+        else:
+            # Checking for time left here allow us to do it more often and avoid timeout issues
+            if self.time_left() < self.TIMER_THRESHOLD:
+                raise Timeout()
+
+            best_value = float("inf")
+            for move in game.get_legal_moves():
+                value, _ = self.minimax(game.forecast_move(move), depth-1, True)
+                best_value, best_move = min((best_value, best_move), (value, move))
+
+        return best_value, best_move
+
         raise NotImplementedError
 
     def alphabeta(self, game, depth, alpha=float("-inf"), beta=float("inf"), maximizing_player=True):
@@ -213,8 +375,51 @@ class CustomPlayer:
                 to pass the project unit tests; you cannot call any other
                 evaluation function directly.
         """
-        if self.time_left() < self.TIMER_THRESHOLD:
-            raise Timeout()
 
-        # TODO: finish this function!
+        # Function to find best score & move for Max player
+        def max_value(self, game, depth, alpha, beta):
+            # Checking for time left inside this function allow us to do it more often and avoid timeout issues
+            if self.time_left() < self.TIMER_THRESHOLD:
+                raise Timeout()
+
+            if depth == 0:
+                return self.score(game, self), (-1, -1)
+
+            best_score, best_move = float("-inf"), (-1, -1)
+
+            for move in game.get_legal_moves():
+                score, _ = min_value(self, game.forecast_move(move), depth-1, alpha, beta)
+                best_score, best_move = max((best_score, best_move), (score, move))
+                if best_score >= beta:
+                    return best_score, best_move
+                alpha = max(alpha, best_score)
+
+            return best_score, best_move
+
+        # Function to find best score & move for Min player
+        def min_value(self, game, depth, alpha, beta):
+            # Checking for time left inside this function allow us to do it more often and avoid timeout issues
+            if self.time_left() < self.TIMER_THRESHOLD:
+                raise Timeout()
+
+            if depth == 0:
+                return self.score(game, self), (-1, -1)
+
+            best_score, best_move = float("inf"), (-1, -1)
+
+            for move in game.get_legal_moves():
+                score, _ = max_value(self, game.forecast_move(move), depth-1, alpha, beta)
+                best_score, best_move = min((best_score, best_move), (score, move))
+                if best_score <= alpha:
+                    return best_score, best_move
+                beta = min(beta, best_score)
+
+            return best_score, best_move
+
+        # Start by calling the appropriate function based on the "maximizing_player" parameter
+        if maximizing_player is True:
+            return max_value(self, game, depth, alpha, beta)
+        else:
+            return min_value(self, game, depth, alpha, beta)
+
         raise NotImplementedError
