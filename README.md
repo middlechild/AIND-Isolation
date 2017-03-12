@@ -108,3 +108,8 @@ The tournament opponents are listed below. (See also: sample heuristics and play
 ## Submitting
 
 Your project is ready for submission when it meets all requirements of the project rubric.  Your code is finished when it passes all unit tests, and you have successfully implemented a suitable heuristic function.
+
+
+## Project Review
+
+[Visit this page to see the final review](https://review.udacity.com/#!/reviews/381758/shared)
